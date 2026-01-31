@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>集結タイマー</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #111827;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 10px;
+    }
+    h1 {
+      color: white;
+      text-align: center;
+      font-size: 1.5rem;
+      margin-bottom: 15px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      max-width: 600px;
+      margin: 0 auto 20px;
+    }
+    .player-card {
+      background: #1f2937;
+      border-radius: 12px;
+      padding: 15px;
+      text-align: center;
+      border: 3px solid #374151;
+      transition: all 0.3s;
+    }
+    .player-card.waiting {
+      border-color: #f59e0b;
+      background: #292524;
+    }
+    .player-card.go {
+      border-color: #22c55e;
+      background: #14532d;
+      animation: pulse 0.5s ease-in-out infinite alternate;
+    }
+    @keyframes pulse {
+      from { transform: scale(1); }
+      to { transform: scale(1.02); }
+    }
+    .player-name {
+      color: #9ca3af;
+      font-size: 0.9rem;
+      margin-bottom: 8px;
+    }
+    .time-input {
+      width: 80px;
+      padding: 10px;
+      font-size: 1.5rem;
+      text-align: center;
+      border: 2px solid #4b5563;
+      border-radius: 8px;
+      background: #374151;
+      color: white;
+      margin-bottom: 10px;
+    }
+    .time-input:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+    .time-label {
+      color: #9ca3af;
+      font-size: 0.8rem;
+    }
+    .countdown {
+      font-size: 3rem;
+      font-weight: bold;
+      color: #f59e0b;
+      margin: 10px 0;
+    }
+    .countdown.go {
+      color: #22c55e;
+      font-size: 2.5rem;
+    }
+    .status {
+      color: #9ca3af;
+      font-size: 0.9rem;
+    }
+    .controls {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .start-btn {
+      padding: 15px 40px;
+      font-size: 1.3rem;
+      font-weight: bold;
+      color: white;
+      background: #3b82f6;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .start-btn:hover {
+      background: #2563eb;
+    }
+    .start-btn:active {
+      transform: scale(0.95);
+    }
+    .start-btn:disabled {
+      background: #4b5563;
+      cursor: not-allowed;
+    }
+    .reset-btn {
+      padding: 10px 25px;
+      font-size: 1rem;
+      color: white;
+      background: #ef4444;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-left: 10px;
+    }
+    .reset-btn:hover {
+      background: #dc2626;
+    }
+    .info {
+      text-align: center;
+      color: #6b7280;
+      font-size: 0.85rem;
+      margin-top: 15px;
+    }
+    .rally-select {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .rally-btn {
+      padding: 12px 25px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: #9ca3af;
+      background: #374151;
+      border: 2px solid #4b5563;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .rally-btn:hover {
+      background: #4b5563;
+    }
+    .rally-btn.active {
+      color: #1f2937;
+      background: #eab308;
+      border-color: #eab308;
+    }
+  </style>
+</head>
+<body>
+  <h1 id="title">🎯 集結タイマー</h1>
+
+  <!-- 集結時間選択 -->
+  <div class="rally-select">
+    <button class="rally-btn active" id="rally1" onclick="selectRally(1)">1分集結</button>
+    <button class="rally-btn" id="rally5" onclick="selectRally(5)">5分集結</button>
+  </div>
+
+  <div class="grid" id="playerGrid">
+    <!-- 4人分のカード -->
+  </div>
+
+  <div class="controls">
+    <button class="start-btn" id="startBtn">🚀 カウントダウン開始</button>
+    <button class="reset-btn" id="resetBtn" style="display:none;">リセット</button>
+  </div>
+
+  <div class="info">
+    行軍時間（秒）を入力 → カウントダウン開始 → 「GO!」で集結を打つ！
+  </div>
+
+  <script>
+    const PLAYERS = ['DAIGORO', 'ヤンヤン', 'どらすけ', 'やま'];
+    
+    let isRunning = false;
+    let timers = [];
+    let audioCtx = null;
+    let selectedRally = 1; // 1分 or 5分
+
+    // 集結時間選択
+    const selectRally = (minutes) => {
+      if (isRunning) return;
+      selectedRally = minutes;
+      document.getElementById('rally1').classList.toggle('active', minutes === 1);
+      document.getElementById('rally5').classList.toggle('active', minutes === 5);
+      document.getElementById('title').textContent = `🎯 ${minutes}分集結タイマー`;
+    };
+
+    // 音を鳴らす
+    const playBeep = (frequency = 800, duration = 150) => {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscillator.frequency.value = frequency;
+      oscillator.type = 'sine';
+      gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration / 1000);
+      oscillator.start(audioCtx.currentTime);
+      oscillator.stop(audioCtx.currentTime + duration / 1000);
+    };
+
+    const playGo = () => {
+      playBeep(1200, 300);
+      setTimeout(() => playBeep(1500, 400), 150);
+    };
+
+    // プレイヤーカード生成
+    const renderCards = () => {
+      const grid = document.getElementById('playerGrid');
+      grid.innerHTML = '';
+      
+      PLAYERS.forEach((name, i) => {
+        const card = document.createElement('div');
+        card.className = 'player-card';
+        card.id = `player-${i}`;
+        card.innerHTML = `
+          <div class="player-name">${name}</div>
+          <input type="number" class="time-input" id="time-${i}" value="15" min="1" max="60">
+          <div class="time-label">秒</div>
+          <div class="countdown" id="countdown-${i}" style="display:none;">--</div>
+          <div class="status" id="status-${i}">行軍時間を入力</div>
+        `;
+        grid.appendChild(card);
+      });
+    };
+
+    // カウントダウン開始
+    const startCountdown = () => {
+      if (isRunning) return;
+      
+      // 各プレイヤーの行軍時間を取得
+      const times = PLAYERS.map((_, i) => {
+        const input = document.getElementById(`time-${i}`);
+        return parseInt(input.value) || 15;
+      });
+
+      // 最長時間を取得
+      const maxTime = Math.max(...times);
+
+      // 各プレイヤーの待機時間を計算（最初の人も10秒待つ）
+      const baseWait = 10;
+      const waitTimes = times.map(t => baseWait + (maxTime - t));
+      const totalTime = baseWait + maxTime;
+
+      isRunning = true;
+      document.getElementById('startBtn').disabled = true;
+      document.getElementById('resetBtn').style.display = 'inline-block';
+      
+      // 集結選択ボタンを無効化
+      document.getElementById('rally1').disabled = true;
+      document.getElementById('rally5').disabled = true;
+
+      // 入力欄を非表示、カウントダウンを表示
+      PLAYERS.forEach((_, i) => {
+        document.getElementById(`time-${i}`).style.display = 'none';
+        document.querySelector(`#player-${i} .time-label`).style.display = 'none';
+        document.getElementById(`countdown-${i}`).style.display = 'block';
+        document.getElementById(`countdown-${i}`).textContent = waitTimes[i];
+        document.getElementById(`status-${i}`).textContent = '待機中...';
+        document.getElementById(`player-${i}`).classList.add('waiting');
+      });
+
+      // カウントダウン実行
+      let elapsed = 0;
+      const interval = setInterval(() => {
+        elapsed++;
+        
+        PLAYERS.forEach((_, i) => {
+          const remaining = waitTimes[i] - elapsed;
+          const countdownEl = document.getElementById(`countdown-${i}`);
+          const statusEl = document.getElementById(`status-${i}`);
+          const cardEl = document.getElementById(`player-${i}`);
+
+          if (remaining > 0) {
+            countdownEl.textContent = remaining;
+            countdownEl.className = 'countdown';
+            // ラスト3秒でビープ音
+            if (remaining <= 3) {
+              playBeep(600 + (3 - remaining) * 200, 100);
+            }
+          } else if (remaining === 0) {
+            countdownEl.textContent = 'GO!';
+            countdownEl.className = 'countdown go';
+            statusEl.textContent = '今すぐ集結！';
+            cardEl.classList.remove('waiting');
+            cardEl.classList.add('go');
+            playGo();
+          }
+        });
+
+        // 全員GOしたら少し待って停止
+        const allDone = waitTimes.every(w => elapsed >= w);
+        if (allDone && elapsed >= totalTime + 3) {
+          clearInterval(interval);
+        }
+      }, 1000);
+
+      timers.push(interval);
+    };
+
+    // リセット
+    const reset = () => {
+      isRunning = false;
+      timers.forEach(t => clearInterval(t));
+      timers = [];
+      
+      document.getElementById('startBtn').disabled = false;
+      document.getElementById('resetBtn').style.display = 'none';
+      
+      // 集結選択ボタンを有効化
+      document.getElementById('rally1').disabled = false;
+      document.getElementById('rally5').disabled = false;
+
+      PLAYERS.forEach((_, i) => {
+        document.getElementById(`time-${i}`).style.display = 'block';
+        document.querySelector(`#player-${i} .time-label`).style.display = 'block';
+        document.getElementById(`countdown-${i}`).style.display = 'none';
+        document.getElementById(`status-${i}`).textContent = '行軍時間を入力';
+        document.getElementById(`player-${i}`).classList.remove('waiting', 'go');
+      });
+    };
+
+    // 初期化
+    renderCards();
+    document.getElementById('startBtn').onclick = startCountdown;
+    document.getElementById('resetBtn').onclick = reset;
+    document.getElementById('title').textContent = '🎯 1分集結タイマー';
+  </script>
+</body>
+</html>
