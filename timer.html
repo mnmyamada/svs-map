@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SUA 集結タイマー</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -208,6 +207,7 @@
   <div class="info">行軍時間(秒)を入力 → カウントダウン開始で同時着弾！</div>
 
   <script>
+    const DEFAULT_PLAYERS = ['PLAYER1', 'PLAYER2', 'PLAYER3', 'PLAYER4];
     const STORAGE_KEY = 'sua_rally_players';
 
     let isRunning = false;
